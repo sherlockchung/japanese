@@ -21,7 +21,7 @@
             border-radius: 12px;
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
             width: 100%;
-            max-width: 800px; /* 稍微加寬以容納更多選項文字 */
+            max-width: 800px;
         }
         h1 {
             color: #2c3e50;
@@ -30,6 +30,28 @@
             border-bottom: 2px solid #3498db;
             padding-bottom: 10px;
         }
+
+        /* 設定測驗區域為相對定位，以供絕對定位的倒數計時器使用 */
+        #quiz-area {
+            position: relative; 
+        }
+
+        /* 新增：右上角倒數計時器的樣式 */
+        #remaining-counter {
+            position: absolute;
+            top: -5px; /* 稍微抬高 */
+            right: -5px; /* 貼緊右側 */
+            font-size: 1.2em;
+            color: #e67e22; /* 橘色強調 */
+            font-weight: bold;
+            padding: 8px 15px;
+            background-color: #fff8f0; 
+            border: 2px solid #e67e22;
+            border-radius: 8px;
+            z-index: 10; /* 確保在最上層 */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
         #question-box {
             background-color: #ecf0f1;
             padding: 25px;
@@ -45,7 +67,7 @@
             margin: 0;
         }
         #question-counter {
-            font-size: 1.2em;
+            font-size: 1.1em;
             color: #7f8c8d;
             margin-top: 10px;
         }
@@ -127,6 +149,8 @@
     <p style="text-align: center; color: #555;">每次測驗將從您的題庫中隨機選取 20 題。</p>
 
     <div id="quiz-area">
+        <div id="remaining-counter"></div> 
+
         <div id="question-box">
             <p id="question-counter">問題 1 / 20</p>
             <h2 id="word-display"></h2>
@@ -558,10 +582,9 @@
     // ----------------------------------------------------------------------
 
     const MAX_QUESTIONS = 20;
-    // 將所有中文意思提取出來，用於製造錯誤選項
     const ALL_CHINESE_MEANINGS = ALL_WORDS.map(word => word.chinese);
-    let availableWords = [...ALL_WORDS]; // 可用的單詞庫（用於錯誤重洗）
-    let currentQuiz = []; // 當前測驗的 20 題
+    let availableWords = [...ALL_WORDS]; 
+    let currentQuiz = []; 
     let currentQuestionIndex = 0;
     let score = 0;
 
@@ -573,12 +596,12 @@
     const feedback = document.getElementById('feedback');
     const finalScore = document.getElementById('final-score');
     const restartButton = document.getElementById('restart-button');
+    const remainingCounter = document.getElementById('remaining-counter'); // 獲取新的倒數計時器元素
 
     // ----------------------------------------------------------------------
     // 核心工具函數
     // ----------------------------------------------------------------------
 
-    // 隨機打亂陣列
     function shuffleArray(array) {
         for (let i = array.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
@@ -587,15 +610,11 @@
         return array;
     }
 
-    // 隨機選取不重複的 N 個元素
     function getRandomElements(array, n, excludeElement = null) {
-        // 確保排除項為字串，以便進行正確比對
         const excludeString = (typeof excludeElement === 'object' && excludeElement !== null) ? excludeElement.chinese : excludeElement;
         
-        // 排除掉指定的元素 (通常是正確答案的中文)
         const tempArray = array.filter(item => item !== excludeString);
 
-        // 如果要取的數量超過了剩下的數量，則將所有剩下的元素都取走
         if (n > tempArray.length) {
             n = tempArray.length;
         }
@@ -609,51 +628,49 @@
     // ----------------------------------------------------------------------
 
     function generateQuiz() {
-        // 1. 確保可用單詞庫足夠
         if (availableWords.length < MAX_QUESTIONS) {
-            // 如果單詞庫不夠 20 個，則從全部單詞中選取
             currentQuiz = getRandomElements(ALL_WORDS, MAX_QUESTIONS);
-            // 並將當前測驗的單詞更新到 availableWords，以防下次抽題時不夠
             availableWords = [...ALL_WORDS]; 
         } else {
-            // 2. 隨機選取 MAX_QUESTIONS 個單詞作為本輪考題
             currentQuiz = getRandomElements(availableWords, MAX_QUESTIONS);
         }
         
-        // 3. 重置狀態
         currentQuestionIndex = 0;
         score = 0;
         quizArea.style.display = 'block';
         resultScreen.style.display = 'none';
         
-        // 4. 開始第一題
         loadQuestion();
     }
 
     function loadQuestion() {
-        // 檢查是否結束
         if (currentQuestionIndex >= MAX_QUESTIONS) {
+            // 測驗結束時清空倒數顯示
+            remainingCounter.textContent = ''; 
             showResult();
             return;
         }
 
         const currentItem = currentQuiz[currentQuestionIndex];
         const correctAnswer = currentItem.chinese;
+
+        const currentNumber = currentQuestionIndex + 1;
+        const remainingNumber = MAX_QUESTIONS - currentQuestionIndex; // 剩餘題數
         
-        // 1. 更新計數器和日文單詞
-        questionCounter.textContent = `問題 ${currentQuestionIndex + 1} / ${MAX_QUESTIONS}`;
+        // 1. 更新中間的題號顯示
+        questionCounter.textContent = `第 ${currentNumber} 題 / 共 ${MAX_QUESTIONS} 題`;
+
+        // 2. 更新右上角的倒數計時器
+        remainingCounter.textContent = `🎁 剩餘 ${remainingNumber} 題`;
+
         wordDisplay.textContent = currentItem.japanese;
         feedback.textContent = '';
         
-        // 2. 準備選項
-        // 隨機選取 3 個錯誤答案 (從全部中文意思中，排除正確答案)
         const incorrectOptions = getRandomElements(ALL_CHINESE_MEANINGS, 3, correctAnswer);
         
-        // 組合所有選項並打亂順序
         let options = [...incorrectOptions, correctAnswer];
         shuffleArray(options);
 
-        // 3. 生成選項按鈕
         optionsContainer.innerHTML = ''; 
         options.forEach(option => {
             const button = document.createElement('button');
@@ -663,40 +680,32 @@
             optionsContainer.appendChild(button);
         });
         
-        // 重新啟用所有按鈕
         document.querySelectorAll('.option-button').forEach(btn => btn.disabled = false);
     }
 
     function checkAnswer(selectedButton, selectedAnswer, correctAnswer) {
-        // 禁用所有按鈕防止重複點擊
         document.querySelectorAll('.option-button').forEach(btn => btn.disabled = true);
 
         if (selectedAnswer === correctAnswer) {
-            // 答對
             score++;
             selectedButton.classList.add('correct');
             feedback.textContent = '✅ 正確！';
             
-            // 答對的單詞，從 availableWords 移除，減少下次被抽到的機率
             const correctWord = currentQuiz[currentQuestionIndex];
             const indexToRemove = availableWords.findIndex(w => w.japanese === correctWord.japanese);
             if (indexToRemove > -1) {
                  availableWords.splice(indexToRemove, 1);
             }
         } else {
-            // 答錯
             selectedButton.classList.add('incorrect');
             feedback.textContent = `❌ 錯誤！正確答案是：${correctAnswer}`;
             
-            // 顯示正確答案
             document.querySelectorAll('.option-button').forEach(btn => {
                 if (btn.textContent === correctAnswer) {
                     btn.classList.add('correct');
                 }
             });
             
-            // **錯誤重新洗進題庫的邏輯：**
-            // 答錯的單詞，確保它存在於 availableWords 庫中，增加下次被抽到的機率。
             const wrongWord = currentQuiz[currentQuestionIndex];
             const isAlreadyAvailable = availableWords.some(w => w.japanese === wrongWord.japanese);
             if (!isAlreadyAvailable) {
@@ -704,9 +713,7 @@
             }
         }
 
-        // 延遲一段時間後載入下一題
         setTimeout(() => {
-            // 清除按鈕顏色
             document.querySelectorAll('.option-button').forEach(btn => btn.classList.remove('correct', 'incorrect'));
             
             currentQuestionIndex++;
@@ -718,18 +725,10 @@
         quizArea.style.display = 'none';
         resultScreen.style.display = 'block';
         finalScore.innerHTML = `您答對了 <span style="font-size: 2em; color: #e74c3c;">${score}</span> 題，總共 ${MAX_QUESTIONS} 題。`;
-        // 這裡可以顯示下一次測驗的單詞庫大小
-        console.log(`單詞庫大小（下次測驗會抽題的範圍）：${availableWords.length} 個。`);
     }
 
-    // ----------------------------------------------------------------------
-    // 初始化與事件監聽
-    // ----------------------------------------------------------------------
-
-    // 開始測驗
     restartButton.addEventListener('click', generateQuiz);
 
-    // 網頁載入完成後自動開始第一次測驗
     window.onload = generateQuiz;
 
 </script>
