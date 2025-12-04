@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>JLPT 考前衝刺特訓 (自動換行版)</title>
+<title>JLPT 考前衝刺特訓 (50/50 比例版)</title>
 <style>
     :root {
         --primary: #4f46e5;
@@ -139,7 +139,7 @@
 <div class="container">
     <div id="start-screen" class="screen active">
         <h1>🔥 日檢單字地獄特訓</h1>
-        <p class="subtitle">針對容易搞混的長音、促音、濁音進行加強<br>意思選項已優化為自動換行</p>
+        <p class="subtitle">本次測驗將**平均分配**兩種題型：<br>意思題 10 題，讀音題 10 題</p>
         <p>每次測驗 20 題，錯誤會自動重來</p>
         <button class="btn-main" onclick="startQuiz()">開始特訓</button>
     </div>
@@ -291,7 +291,7 @@ const rawData = [
 
     // === 副詞與連接詞 ===
     {k:"万が一", r:"まんがいち", m:"萬一 (☆)"},
-    {k:"些か", r:"ひょっとして", m:"該不會/莫非"},
+    {k:"或いは", r:"あるいは", m:"或者"},
     {k:"競技", r:"きょうぎ", m:"競技/比賽"},
     {k:"出場", r:"しゅつじょう", m:"出場 (比賽)"},
     {k:"当分", r:"とうぶん", m:"暫時/目前 (☆)"},
@@ -327,7 +327,6 @@ const rawData = [
     {k:"今一", r:"いまいち", m:"差一點/不夠好"},
     {k:"折角", r:"せっかく", m:"特意/好不容易"},
     {k:"少なくとも", r:"せめて", m:"至少/起碼"},
-    {k:"或いは", r:"あるいは", m:"或者"},
     {k:"散々", r:"ばらばら", m:"支離破碎/分散"},
     {k:"元々", r:"そもそも", m:"原本/到底"},
     {k:"配る", r:"くばる", m:"分發"},
@@ -629,24 +628,41 @@ const rawData = [
 // ==========================================
 let quizQueue = [];
 let currentQuestion = null;
-let totalLimit = 20;
+let totalLimit = 20; // 鎖定單次測驗 20 題
 let questionCount = 0;
 let isProcessing = false;
 
 function startQuiz() {
+    // 檢查單字庫是否足夠 (至少需要 2 個單字才能分配題型)
+    if (rawData.length < 2) {
+        alert("單字庫太少，請至少輸入 2 個單字！");
+        return;
+    }
+    
+    // 1. 隨機選取單字
     let shuffledDB = [...rawData].sort(() => 0.5 - Math.random());
-    // 每次取20題，若資料不足則全取
     let sessionWords = shuffledDB.slice(0, Math.min(totalLimit, shuffledDB.length));
     
-    // 隨機分配題型 (type 1: 意思, type 2: 讀音)
-    quizQueue = sessionWords.map(word => {
-        return {
-            ...word,
-            type: Math.random() > 0.5 ? 1 : 2 
-        };
-    });
+    // 2. 確定題數分配 (確保兩種題型比例為 50/50，若總題數非偶數，則意思題多一題)
+    const totalWords = sessionWords.length;
+    const numMeaning = Math.ceil(totalWords / 2); // 10 或 11
+    const numReading = totalWords - numMeaning;    // 10 或 9
 
+    // 3. 分割並分配題型
+    let meaningWords = sessionWords.slice(0, numMeaning);
+    let readingWords = sessionWords.slice(numMeaning);
+    
+    let meaningQuiz = meaningWords.map(word => ({ ...word, type: 1 }));
+    let readingQuiz = readingWords.map(word => ({ ...word, type: 2 }));
+    
+    // 4. 合併並重新徹底打亂順序
+    quizQueue = [...meaningQuiz, ...readingQuiz].sort(() => 0.5 - Math.random());
+
+    // 5. 更新總題數顯示
     totalLimit = quizQueue.length;
+    document.getElementById('progress-text').innerText = `第 1 / ${totalLimit} 題`;
+    document.getElementById('score-text').innerText = `剩餘: ${totalLimit}`;
+
     document.getElementById('start-screen').style.display = 'none';
     document.getElementById('quiz-screen').style.display = 'block';
     
@@ -683,14 +699,12 @@ function renderUI(q) {
 
     let correctAnswer = "";
     let distractors = [];
-    let isMeaningQuiz = false;
 
     if (q.type === 1) {
-        // === 意思測驗 ===
-        isMeaningQuiz = true;
+        // === 意思測驗 (type 1) ===
         qTag.innerText = "請選出中文意思";
         qTag.style.background = "#4f46e5"; // Blue
-        qText.innerText = q.k || q.r; // 優先顯示漢字
+        qText.innerText = q.k || q.r; 
         correctAnswer = q.m;
 
         // 隨機干擾 (意思)
@@ -698,8 +712,7 @@ function renderUI(q) {
         distractors = otherWords.sort(() => 0.5 - Math.random()).slice(0, 3).map(w => w.m);
 
     } else {
-        // === 讀音測驗 ===
-        isMeaningQuiz = false;
+        // === 讀音測驗 (type 2) ===
         qTag.innerText = "請選出正確讀音";
         qTag.style.background = "#d97706"; // Orange
         qText.innerText = q.k;
@@ -710,7 +723,7 @@ function renderUI(q) {
     }
 
     let allOptions = [correctAnswer, ...distractors];
-    // 補足選項至4個
+    // 補足選項至4個 (防止資料庫太少時出錯)
     while(allOptions.length < 4) allOptions.push("---");
     allOptions.sort(() => 0.5 - Math.random());
 
@@ -718,8 +731,7 @@ function renderUI(q) {
         let btn = document.createElement('button');
         btn.className = 'opt-btn';
         
-        // 核心修改：將 "/" 替換為換行符號 <br>，並處理可能存在的空白
-        // 針對意思題或任何包含 / 的選項進行處理
+        // 將 "/" 替換為換行符號 <br>
         btn.innerHTML = opt.replace(/\s*\/\s*/g, '<br>');
         
         btn.onclick = () => checkAnswer(btn, opt, correctAnswer);
@@ -735,19 +747,34 @@ function generateKanaDistractors(correct) {
     while(set.size < 3 && limit < 20) {
         let fake = correct;
         let mode = Math.floor(Math.random() * 4);
-
-        if (mode === 0) { // 長音
-            fake = fake.endsWith('う') ? fake.slice(0,-1) : fake + 'う';
-        } else if (mode === 1) { // 促音
-            if(fake.includes('っ')) fake = fake.replace('っ','');
-            else if(fake.length > 1) fake = fake.slice(0,1) + 'っ' + fake.slice(1);
-        } else if (mode === 2) { // 濁音 (k->g, t->d)
-            fake = fake.replace('か','が').replace('た','だ').replace('て','で').replace('き','ぎ');
-        } else { // 隨機替換
-             // 簡單替換一個字元
-             let pos = Math.floor(Math.random() * fake.length);
-             let chars = "あいうえおかきくけこさしすせそたちつてとなにぬねの";
-             fake = fake.substring(0, pos) + chars[Math.floor(Math.random()*chars.length)] + fake.substring(pos+1);
+        
+        // 確保至少有兩個字元才進行變化
+        if(correct.length > 1) {
+            if (mode === 0) { // 長音
+                if (fake.endsWith('う')) fake = fake.slice(0,-1);
+                else if (fake.endsWith('い') || fake.endsWith('え') || fake.endsWith('お')) fake += 'う';
+                else fake += 'う';
+            } else if (mode === 1) { // 促音
+                if(fake.includes('っ')) fake = fake.replace('っ','');
+                else {
+                    let pos = 1 + Math.floor(Math.random() * (fake.length - 1));
+                    fake = fake.slice(0, pos) + 'っ' + fake.slice(pos);
+                }
+            } else if (mode === 2) { // 濁音
+                const replacements = {'か':'が', 'き':'ぎ', 'く':'ぐ', 'け':'げ', 'こ':'ご', 'さ':'ざ', 'し':'じ', 'す':'ず', 'せ':'ぜ', 'そ':'ぞ', 'た':'だ', 'ち':'ぢ', 'つ':'づ', 'て':'で', 'と':'ど', 'は':'ば'};
+                let chars = fake.split('');
+                for(let i=0; i<chars.length; i++) {
+                    if(replacements[chars[i]] && Math.random() > 0.6) {
+                        chars[i] = replacements[chars[i]];
+                        break;
+                    }
+                }
+                fake = chars.join('');
+            } else { // 隨機替換
+                 let pos = Math.floor(Math.random() * fake.length);
+                 let chars = "あいうえおかきくけこさしすせそたちつてとなにぬねの";
+                 fake = fake.substring(0, pos) + chars[Math.floor(Math.random()*chars.length)] + fake.substring(pos+1);
+            }
         }
 
         if(fake !== correct && fake.length > 0) set.add(fake);
@@ -781,8 +808,7 @@ function checkAnswer(btn, selected, correct) {
         
         // 顯示正確答案
         allBtns.forEach(b => {
-            // 需還原innerHTML比對，或直接比對原始文字會較複雜，這裡簡單處理：
-            // 因為我們在render時改了innerHTML，這裡重新比對一下取代後的字串
+            // 由於選項內容被轉換成了innerHTML，所以需要用innerHTML進行比對
             if(b.innerHTML === correct.replace(/\s*\/\s*/g, '<br>')) {
                 b.classList.add('correct');
             }
