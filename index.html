@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日檢單詞測驗（大型題庫）</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 800px; /* 稍微加寬以容納更多選項文字 */
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        #question-box {
+            background-color: #ecf0f1;
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            text-align: center;
+            min-height: 100px;
+        }
+        #word-display {
+            font-size: 3.0em;
+            font-weight: bold;
+            color: #e74c3c;
+            margin: 0;
+        }
+        #question-counter {
+            font-size: 1.2em;
+            color: #7f8c8d;
+            margin-top: 10px;
+        }
+        .options-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        .option-button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 18px 20px;
+            border-radius: 8px;
+            font-size: 1.2em;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.1s;
+            text-align: center;
+            line-height: 1.4;
+            word-break: break-all;
+        }
+        .option-button:hover {
+            background-color: #2980b9;
+        }
+        .option-button:active {
+            transform: scale(0.98);
+        }
+        .correct {
+            background-color: #27ae60 !important;
+        }
+        .incorrect {
+            background-color: #c0392b !important;
+        }
+        #feedback {
+            font-size: 1.3em;
+            font-weight: bold;
+            text-align: center;
+            min-height: 40px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        #result-screen {
+            text-align: center;
+            padding: 40px;
+            background-color: #f0f8ff;
+            border-radius: 8px;
+            border: 1px solid #3498db;
+        }
+        #result-screen h2 {
+            color: #3498db;
+            margin-top: 0;
+            font-size: 2em;
+        }
+        #result-screen p {
+            font-size: 1.2em;
+            color: #2c3e50;
+        }
+        #restart-button {
+            background-color: #e67e22;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 1.2em;
+            cursor: pointer;
+            margin-top: 25px;
+            transition: background-color 0.3s;
+        }
+        #restart-button:hover {
+            background-color: #d35400;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>日檢單詞測驗（20 題）</h1>
+    <p style="text-align: center; color: #555;">每次測驗將從您的題庫中隨機選取 20 題。</p>
+
+    <div id="quiz-area">
+        <div id="question-box">
+            <p id="question-counter">問題 1 / 20</p>
+            <h2 id="word-display"></h2>
+        </div>
+        
+        <div id="feedback"></div>
+
+        <div class="options-grid" id="options-container">
+            </div>
+    </div>
+
+    <div id="result-screen" style="display: none;">
+        <h2>測驗結束！</h2>
+        <p id="final-score"></p>
+        <button id="restart-button">再測驗一次</button>
+    </div>
+
+</div>
+
+<script>
+    // ----------------------------------------------------------------------
+    // 1. 單詞庫 (已匯入您提供的所有單詞)
+    // ----------------------------------------------------------------------
+    const ALL_WORDS = [
+        { japanese: "ひっくりかえす", chinese: "推翻、翻倒、顛倒" },
+        { japanese: "けいと", chinese: "毛線" },
+        { japanese: "あむ", chinese: "編織" },
+        { japanese: "ゴミがちらかる", chinese: "垃圾散亂、雜物散落" },
+        { japanese: "どける", chinese: "挪開、移開" },
+        { japanese: "ほこり", chinese: "灰塵" },
+        { japanese: "ほうき", chinese: "掃帚" },
+        { japanese: "ちりとり", chinese: "畚箕" },
+        { japanese: "ほす", chinese: "曬乾、晾乾" },
+        { japanese: "かわかす", chinese: "弄乾、使乾燥" },
+        { japanese: "しわをのばす", chinese: "燙平皺紋" },
+        { japanese: "つるす", chinese: "懸掛、吊掛" },
+        { japanese: "ゆでる", chinese: "水煮、汆燙" },
+        { japanese: "いる", chinese: "炒（少油）、烘烤" },
+        { japanese: "いためる", chinese: "油炒（多油）、翻炒" },
+        { japanese: "ごはんをたく", chinese: "煮飯、燒飯" },
+        { japanese: "をにる", chinese: "煮（及物）、燉煮" },
+        { japanese: "がにえる", chinese: "煮熟、煮爛（不及物）" },
+        { japanese: "出来上がる 仕上がる", chinese: "完成、做好" },
+        { japanese: "出来たての料理", chinese: "剛做好的料理" },
+        { japanese: "かじる", chinese: "啃、咬" },
+        { japanese: "よいがさめる/を覚ます", chinese: "酒醒" },
+        { japanese: "よっぱらい", chinese: "醉漢、酒鬼" },
+        { japanese: "めまいがする", chinese: "頭暈" },
+        { japanese: "おごる", chinese: "請客" },
+        { japanese: "けいいをもつ/はらう", chinese: "尊敬、表示敬意" },
+        { japanese: "つまむ", chinese: "捏、夾、摘、少量吃" },
+        { japanese: "こしょう", chinese: "胡椒" },
+        { japanese: "す", chinese: "醋" },
+        { japanese: "しおからい", chinese: "鹹的" },
+        { japanese: "すっぱい", chinese: "酸的" },
+        { japanese: "さっぱりした", chinese: "清爽的、乾脆的" },
+        { japanese: "しつこい/くどい", chinese: "油膩的、囉嗦的" },
+        { japanese: "すきずき", chinese: "各有所好、品味不同" },
+        { japanese: "すききらい", chinese: "挑食、好惡" },
+        { japanese: "まずい", chinese: "難吃的、不高明的" },
+        { japanese: "余程（よほど）", chinese: "很、相當、差點" },
+        { japanese: "しきりに", chinese: "不斷地、屢次" },
+        { japanese: "むしろ", chinese: "反而、寧可" },
+        { japanese: "どなる", chinese: "怒吼、大聲責罵" },
+        { japanese: "うわさをひろめる", chinese: "散播謠言" },
+        { japanese: "にらむ", chinese: "瞪視" },
+        { japanese: "ぶつぶつ/ふへいを言う", chinese: "嘀咕、發牢騷" },
+        { japanese: "にくらしい", chinese: "可恨的、討厭的" },
+        { japanese: "にくむ/うらむ", chinese: "憎恨/怨恨" },
+        { japanese: "あこがれる", chinese: "憧憬、嚮往" },
+        { japanese: "さまたげる（妨げる）", chinese: "妨礙、阻礙" },
+        { japanese: "ふせぐ（防ぐ）", chinese: "防禦、防止" },
+        { japanese: "あわれ", chinese: "可憐、悲哀" },
+        { japanese: "あいにく", chinese: "不巧、偏偏、可惜" },
+        { japanese: "あいぼう", chinese: "搭檔、夥伴" },
+        { japanese: "はでな", chinese: "華麗的、花俏的" },
+        { japanese: "ひきょうな", chinese: "卑鄙的、懦弱的" },
+        { japanese: "いばる/いばってる", chinese: "傲慢、炫耀" },
+        { japanese: "たもつ", chinese: "保持、維持" },
+        { japanese: "いさましい", chinese: "勇敢的、雄壯的" },
+        { japanese: "足首をねじる/ひねる", chinese: "扭傷腳踝" },
+        { japanese: "けつえき", chinese: "血液" },
+        { japanese: "おせん", chinese: "污染" },
+        { japanese: "ないか／げか", chinese: "內科／外科" },
+        { japanese: "ゆかにしゃがむ", chinese: "蹲在地板上" },
+        { japanese: "しょうどくする", chinese: "消毒" },
+        { japanese: "あおじろい", chinese: "臉色蒼白" },
+        { japanese: "いすにこしかける", chinese: "坐下、入座" },
+        { japanese: "あしのあと", chinese: "腳印、足跡" },
+        { japanese: "みずうみ", chinese: "湖泊" },
+        { japanese: "すな / どろ", chinese: "沙子 / 泥巴" },
+        { japanese: "なだらかな / けわしい", chinese: "平緩的 / 陡峭的" },
+        { japanese: "ゆうひがしずむ", chinese: "夕陽西下" },
+        { japanese: "せきせつ", chinese: "積雪" },
+        { japanese: "しわす", chinese: "臘月、十二月" },
+        { japanese: "たき", chinese: "瀑布" },
+        { japanese: "だらしない", chinese: "散漫的、邋遢的" },
+        { japanese: "ダラダラ", chinese: "拖拖拉拉、滴滴答答" },
+        { japanese: "つよきな / よわきな", chinese: "強硬的 / 軟弱的" },
+        { japanese: "ごういんな", chinese: "強硬的、粗暴的" },
+        { japanese: "わがまま", chinese: "任性、自我中心" },
+        { japanese: "たよりなる", chinese: "可靠的、值得依賴的" },
+        { japanese: "きがあらい", chinese: "性情粗暴、脾氣大" },
+        { japanese: "しゃれを言う", chinese: "說笑話、開玩笑" },
+        { japanese: "ひきうける", chinese: "承擔、接受" },
+        { japanese: "やとう/やとわれる", chinese: "雇用/被雇用" },
+        { japanese: "をもうける/がもうかる", chinese: "賺（錢）/賺錢（不及物）" },
+        { japanese: "あてはまる", chinese: "適用、符合" },
+        { japanese: "はりきって", chinese: "幹勁十足地" },
+        { japanese: "おいかける", chinese: "追趕" },
+        { japanese: "仕事をしじする", chinese: "指示工作" },
+        { japanese: "しゅうにんする/職位につく", chinese: "就任/就職" },
+        { japanese: "つとめる", chinese: "工作、任職" },
+        { japanese: "そんがいをだす", chinese: "造成損害" },
+        { japanese: "そしきする", chinese: "組織" },
+        { japanese: "ひょっとして/もしも/まんがいち", chinese: "萬一、或許、假使" },
+        { japanese: "きょうぎ", chinese: "競技、競賽" },
+        { japanese: "試合にしゅつじょうする", chinese: "參加比賽" },
+        { japanese: "当分（とうぶん）", chinese: "目前、暫時" },
+        { japanese: "かじつ", chinese: "果實" },
+        { japanese: "みのる", chinese: "結果實、成熟" },
+        { japanese: "めんどう", chinese: "麻煩、費事" },
+        { japanese: "うっかり", chinese: "不小心、不注意" },
+        { japanese: "かなり けっこう だいぶ そうとう", chinese: "相當、很、頗" },
+        { japanese: "できがせめる", chinese: "天快亮了" },
+        { japanese: "よあけ", chinese: "黎明、破曉" },
+        { japanese: "ひざしがまぶしい", chinese: "陽光刺眼" },
+        { japanese: "ようちえん", chinese: "幼稚園" },
+        { japanese: "ようじ", chinese: "幼兒、兒童" },
+        { japanese: "といにこたえる", chinese: "回答問題" },
+        { japanese: "ひっきしけんのとうあんをだす", chinese: "提交筆試考卷" },
+        { japanese: "てつがく", chinese: "哲學" },
+        { japanese: "ゼミ えんしゅう", chinese: "專題討論課" },
+        { japanese: "きょうじゅ", chinese: "教授" },
+        { japanese: "うけもつ たんとうする", chinese: "負責、擔任" },
+        { japanese: "こくりつ しりつ", chinese: "國立 私立" },
+        { japanese: "せんこうする", chinese: "專攻、主修" },
+        { japanese: "さんこうぶんけん", chinese: "參考文獻" },
+        { japanese: "いまいち", chinese: "差一點、總覺得不夠好" },
+        { japanese: "せっかく", chinese: "好不容易、特意" },
+        { japanese: "せめて", chinese: "至少、起碼" },
+        { japanese: "あるいは", chinese: "或許、或者" },
+        { japanese: "ばらばら", chinese: "分散、零散" },
+        { japanese: "そもそも", chinese: "原本、起初" },
+        { japanese: "チラシ", chinese: "傳單" },
+        { japanese: "くばる", chinese: "分發、派發" },
+        { japanese: "あまる", chinese: "剩下、多餘" },
+        { japanese: "にじ", chinese: "彩虹" },
+        { japanese: "さかんに", chinese: "盛行、興盛地" },
+        { japanese: "スラスラ", chinese: "流暢地、順利地" },
+        { japanese: "決まってて", chinese: "一定、毫無疑問" },
+        { japanese: "おうぼ", chinese: "應徵、報名" },
+        { japanese: "さわやか", chinese: "爽快、清爽" },
+        { japanese: "みこみ", chinese: "希望、可能性" },
+        { japanese: "あれたてんき", chinese: "惡劣的天氣" },
+        { japanese: "さくや", chinese: "昨夜、昨晚" },
+        { japanese: "こげる", chinese: "燒焦" },
+        { japanese: "やけどをおう", chinese: "燙傷、燒傷" },
+        { japanese: "てあて", chinese: "治療、津貼" },
+        { japanese: "いま", chinese: "現在" },
+        { japanese: "ふれる", chinese: "接觸、觸及" },
+        { japanese: "そせん", chinese: "祖先" },
+        { japanese: "しそん", chinese: "子孫" },
+        { japanese: "まご", chinese: "孫子" },
+        { japanese: "せだい", chinese: "世代" },
+        { japanese: "いっか", chinese: "一家、一戶" },
+        { japanese: "おやこうこう", chinese: "孝順" },
+        { japanese: "なつかしい", chinese: "懷念的、令人想念的" },
+        { japanese: "しまい", chinese: "姐妹" },
+        { japanese: "すえっこ", chinese: "老么、最小的孩子" },
+        { japanese: "ひとりっこ", chinese: "獨生子" },
+        { japanese: "ふたご", chinese: "雙胞胎" },
+        { japanese: "なかよし", chinese: "好朋友、感情好" },
+        { japanese: "おじょうちゃん", chinese: "小女兒、小姐" },
+        { japanese: "おぼうちゃん", chinese: "小兒子、少爺" },
+        { japanese: "ふさい", chinese: "夫妻" },
+        { japanese: "しょくば", chinese: "職場" },
+        { japanese: "おないとし", chinese: "同年齡" },
+        { japanese: "きつかい", chinese: "掛慮、操心" },
+        { japanese: "あくしゅ", chinese: "握手" },
+        { japanese: "おじぎをする", chinese: "鞠躬" },
+        { japanese: "ながねん", chinese: "長年" },
+        { japanese: "ちっとも", chinese: "一點也不" },
+        { japanese: "まるで", chinese: "簡直、好像" },
+        { japanese: "とくちょう", chinese: "特徵" },
+        { japanese: "対になる", chinese: "成為一對" },
+        { japanese: "せっきょくてき", chinese: "積極的" },
+        { japanese: "しょうきょくてき", chinese: "消極的" },
+        { japanese: "おとなしい", chinese: "溫順的、安靜的" },
+        { japanese: "やかましい", chinese: "吵鬧的、囉嗦的" },
+        { japanese: "しんちょうな", chinese: "慎重的、小心的" },
+        { japanese: "そそっかしい", chinese: "冒失的、魯莽的" },
+        { japanese: "ぶきような", chinese: "笨拙的" },
+        { japanese: "ようりょうがいい", chinese: "精明的、會辦事的" },
+        { japanese: "けんきょな", chinese: "謙虛的" },
+        { japanese: "なまいきな", chinese: "傲慢的、自大的" },
+        { japanese: "するどい", chinese: "鋒利的、敏銳的" },
+        { japanese: "にぶい", chinese: "遲鈍的、不靈敏的" },
+        { japanese: "はきはきした", chinese: "乾脆俐落的、爽快的" },
+        { japanese: "じゅんすいな", chinese: "純粹的、單純的" },
+        { japanese: "おだやかな", chinese: "穩定的、溫和的" },
+        { japanese: "ちょうしょ", chinese: "長處、優點" },
+        { japanese: "たんしょ", chinese: "短處、缺點" },
+        { japanese: "わがままな", chinese: "任性的" },
+        { japanese: "あつかましち", chinese: "厚臉皮的、無恥的" },
+        { japanese: "ずうずうしい", chinese: "厚顏無恥的" },
+        { japanese: "けちな", chinese: "吝嗇的" },
+        { japanese: "へいき", chinese: "若無其事、不介意" },
+        { japanese: "うらぎる", chinese: "背叛" },
+        { japanese: "ふざけてる", chinese: "開玩笑、鬧著玩" },
+        { japanese: "あきる", chinese: "厭倦、膩煩" },
+        { japanese: "あきっぼい", chinese: "易厭倦的、沒長性的" },
+        { japanese: "あわてる", chinese: "慌張、急忙" },
+        { japanese: "のんきな", chinese: "悠閒的、無憂無慮的" },
+        { japanese: "のんびりした", chinese: "悠閒的、輕鬆的" },
+        { japanese: "そっちょく", chinese: "坦率、直率" },
+        { japanese: "どきどきする", chinese: "忐忑不安、緊張" },
+        { japanese: "イライラする", chinese: "焦躁、煩躁" },
+        { japanese: "きらくに", chinese: "輕鬆地、無拘無束地" },
+        { japanese: "あせる", chinese: "著急、焦慮" },
+        { japanese: "きげん", chinese: "期限、心情" },
+        { japanese: "せいけつな", chinese: "清潔的" },
+        { japanese: "ふけつな", chinese: "不潔的、骯髒的" },
+        { japanese: "みかけ", chinese: "外表、外觀" },
+        { japanese: "はでな", chinese: "華麗的" },
+        { japanese: "じみな", chinese: "樸素的、不起眼的" },
+        { japanese: "わざと", chinese: "故意地" },
+        { japanese: "いっさい", chinese: "一切、全部" },
+        { japanese: "めっきり", chinese: "顯著地、非常" },
+        { japanese: "あいかわらず", chinese: "一如既往、仍然" },
+        { japanese: "ずるい", chinese: "狡猾的、奸詐的" },
+        { japanese: "みかた", chinese: "看法、同伴" },
+        { japanese: "こっそり", chinese: "偷偷地、悄悄地" },
+        { japanese: "うたがう", chinese: "懷疑" },
+        { japanese: "うやまう", chinese: "尊敬、敬重" },
+        { japanese: "うらやむ", chinese: "羨慕" },
+        { japanese: "なやむ", chinese: "煩惱、苦惱" },
+        { japanese: "しつぼうする", chinese: "失望" },
+        { japanese: "ガッカリする", chinese: "失望、洩氣" },
+        { japanese: "うらやましい", chinese: "令人羨慕的" },
+        { japanese: "きのどくた", chinese: "可憐、不幸" },
+        { japanese: "あやまる", chinese: "道歉" },
+        { japanese: "なぐさめる", chinese: "安慰" },
+        { japanese: "ののしる", chinese: "謾罵、辱罵" },
+        { japanese: "けなす", chinese: "貶低、誹謗" },
+        { japanese: "さける", chinese: "避開、躲開" },
+        { japanese: "にげる", chinese: "逃跑" },
+        { japanese: "ちょうこくする", chinese: "彫刻、雕刻" },
+        { japanese: "じょげんする", chinese: "勸告、建議" },
+        { japanese: "いいつける", chinese: "吩咐、告狀" },
+        { japanese: "むすびつける", chinese: "聯繫、結合" },
+        { japanese: "じまんする", chinese: "自誇、驕傲" },
+        { japanese: "かくす", chinese: "隱藏" },
+        { japanese: "ひみつ", chinese: "秘密" },
+        { japanese: "ごかいをとく / がとける", chinese: "消除誤會" },
+        { japanese: "なかなおりする", chinese: "和好、言歸於好" },
+        { japanese: "エチケット", chinese: "禮儀、規矩" },
+        { japanese: "さほう", chinese: "禮節、規矩" },
+        { japanese: "じょうしき", chinese: "常識" },
+        { japanese: "ふくそう", chinese: "服裝" },
+        { japanese: "みっともない", chinese: "難看的、不體面的" },
+        { japanese: "みかける", chinese: "看到、偶然遇見" },
+        { japanese: "さめる", chinese: "冷卻、覺醒" },
+        { japanese: "しつれんする", chinese: "失戀" },
+        { japanese: "こいする", chinese: "戀愛" },
+        { japanese: "どうとく", chinese: "道德" },
+        { japanese: "まさに", chinese: "正是、簡直" },
+        { japanese: "おもいきって", chinese: "毅然地、下定決心地" },
+        { japanese: "ようやく", chinese: "終於、好不容易" },
+        { japanese: "いつのまにか", chinese: "不知不覺中" },
+        { japanese: "くう", chinese: "吃（較粗俗）" },
+        { japanese: "しゃぶる", chinese: "吮吸、舔" },
+        { japanese: "あじわう", chinese: "品嚐、體會" },
+        { japanese: "かぐ", chinese: "聞（氣味）" },
+        { japanese: "しょくよく", chinese: "食慾" },
+        { japanese: "ゆのみ", chinese: "茶杯" },
+        { japanese: "おぼん", chinese: "托盤" },
+        { japanese: "えいよう", chinese: "營養" },
+        { japanese: "しょうか", chinese: "消化" },
+        { japanese: "いにもたれる", chinese: "胃脹、胃不舒服" },
+        { japanese: "かんげいかい", chinese: "歡迎會" },
+        { japanese: "つぎあう", chinese: "互請、互相請客" },
+        { japanese: "よう（酔）", chinese: "醉" },
+        { japanese: "ふつかよい", chinese: "宿醉" },
+        { japanese: "ずつう", chinese: "頭痛" },
+        { japanese: "はきけ", chinese: "噁心、想吐" },
+        { japanese: "はく", chinese: "吐（及物）、穿（鞋襪）" },
+        { japanese: "うしなう", chinese: "失去、遺失" },
+        { japanese: "にぎる", chinese: "握、捏" },
+        { japanese: "ぜいたく", chinese: "奢侈" },
+        { japanese: "そまつな", chinese: "粗糙的、簡陋的" },
+        { japanese: "てんれんの", chinese: "天然的、天生的" },
+        { japanese: "きちょうな", chinese: "貴重的、寶貴的" },
+        { japanese: "げんさん", chinese: "原產地" },
+        { japanese: "このみのあじ", chinese: "喜歡的口味" },
+        { japanese: "ぬう", chinese: "縫紉" },
+        { japanese: "がら", chinese: "花樣、圖案" },
+        { japanese: "もよう", chinese: "花紋、圖案" },
+        { japanese: "しまもよう", chinese: "條紋圖案" },
+        { japanese: "ぞうきん", chinese: "抹布" },
+        { japanese: "はく", chinese: "掃（地）" },
+        { japanese: "ピカピカ", chinese: "閃閃發光、光亮" },
+        { japanese: "うらがえす", chinese: "翻面、裡外翻轉" },
+        { japanese: "たたむ", chinese: "摺疊" },
+        { japanese: "すいじ", chinese: "家務、炊事" },
+        { japanese: "こんだて", chinese: "菜單、伙食" },
+        { japanese: "フライパン", chinese: "平底鍋" },
+        { japanese: "ねっする", chinese: "加熱" },
+        { japanese: "かねつする", chinese: "加熱" },
+        { japanese: "たく（炊）", chinese: "煮飯" },
+        { japanese: "とく とかす とける", chinese: "溶解（及物/不及物）" },
+        { japanese: "そうこ", chinese: "倉庫" },
+        { japanese: "しまう", chinese: "收進、收拾" },
+        { japanese: "せんをする", chinese: "蓋上蓋子" },
+        { japanese: "かび（黴び）", chinese: "黴菌、發霉" },
+        { japanese: "はえる", chinese: "生長、發霉" },
+        { japanese: "くさる", chinese: "腐爛、變質" },
+        { japanese: "あかんぼう", chinese: "嬰兒" },
+        { japanese: "きせる", chinese: "給穿衣服" },
+        { japanese: "なでる", chinese: "撫摸" },
+        { japanese: "だく だっこする", chinese: "抱、抱著（人或寵物）" },
+        { japanese: "いだく かかえる", chinese: "懷抱、抱著（抽象或物體）" },
+        { japanese: "せおう", chinese: "背負" },
+        { japanese: "おんぶする", chinese: "背（人）" },
+        { japanese: "かまう", chinese: "管、介意" },
+        { japanese: "あばれる", chinese: "亂鬧、發脾氣" },
+        { japanese: "こぼす こぼれる", chinese: "弄灑/灑出來" },
+        { japanese: "よごす よごれる", chinese: "弄髒/變髒" },
+        { japanese: "みずたまもよう", chinese: "水玉花紋、圓點花紋" },
+        { japanese: "かえって", chinese: "反而、反倒" },
+        { japanese: "あらかじめ", chinese: "事先、預先" },
+        { japanese: "ぐっと", chinese: "一口氣、更加、一下子" },
+        { japanese: "しょうじょう", chinese: "症狀" },
+        { japanese: "くずす", chinese: "弄垮、破壞" },
+        { japanese: "かかる", chinese: "罹患（疾病）" },
+        { japanese: "でんせん（伝染）", chinese: "傳染" },
+        { japanese: "そめる", chinese: "染色" },
+        { japanese: "こっせつ", chinese: "骨折" },
+        { japanese: "つかれがたまる", chinese: "積累疲勞" },
+        { japanese: "もむ", chinese: "按摩、揉" },
+        { japanese: "しらが", chinese: "白頭髮" },
+        { japanese: "ぬける", chinese: "脫落、掉落" },
+        { japanese: "ひねる", chinese: "扭轉、擰" },
+        { japanese: "ねじる", chinese: "扭、擰" },
+        { japanese: "ほうたい", chinese: "繃帶" },
+        { japanese: "きく（効く）", chinese: "有效、奏效" },
+        { japanese: "ふるえる", chinese: "顫抖" },
+        { japanese: "くつう", chinese: "苦痛、疼痛" },
+        { japanese: "やっきょく", chinese: "藥局、藥店" },
+        { japanese: "かんじゃ", chinese: "病患、病人" },
+        { japanese: "みる（診る）", chinese: "診斷" },
+        { japanese: "しんさつ", chinese: "診察" },
+        { japanese: "しんたん", chinese: "診斷、檢查" },
+        { japanese: "ないか", chinese: "內科" },
+        { japanese: "げか", chinese: "外科" },
+        { japanese: "はう", chinese: "爬" },
+        { japanese: "もたれる", chinese: "倚靠、胃脹" },
+        { japanese: "よぶんな", chinese: "多餘的" },
+        { japanese: "よぼう（予防）", chinese: "預防" },
+        { japanese: "てきど", chinese: "適度" },
+        { japanese: "てつや", chinese: "熬夜" },
+        { japanese: "ふそく", chinese: "不足" },
+        { japanese: "すいみんぶそく", chinese: "睡眠不足" },
+        { japanese: "くしゃみ しゃっくり あくび", chinese: "噴嚏 打嗝 呵欠" },
+        { japanese: "じゅみょう", chinese: "壽命" },
+        { japanese: "ながいき", chinese: "長壽" },
+        { japanese: "はだ", chinese: "皮膚" },
+        { japanese: "あれる", chinese: "粗糙、荒蕪" },
+        { japanese: "カミソリ", chinese: "刮鬍刀" },
+        { japanese: "ひげ", chinese: "鬍子" },
+        { japanese: "そる", chinese: "刮、剃" },
+        { japanese: "くし（櫛）", chinese: "梳子" },
+        { japanese: "とく とかす", chinese: "梳（頭髮）" },
+        { japanese: "立ち上がる", chinese: "站起來、起身" },
+        { japanese: "とび上がる", chinese: "跳起來" },
+        { japanese: "いちおう", chinese: "暫且、姑且" },
+        { japanese: "とうぶん", chinese: "暫時、目前" },
+        { japanese: "たちまち", chinese: "立刻、轉眼間" },
+        { japanese: "いまに", chinese: "不久、遲早" },
+        { japanese: "きょうぎ", chinese: "競技、競賽" },
+        { japanese: "しゅつじょうする", chinese: "出場、參賽" },
+        { japanese: "かつやくする", chinese: "活躍、大顯身手" },
+        { japanese: "したがう", chinese: "遵從、跟隨" },
+        { japanese: "ベテラン", chinese: "老手、經驗豐富的人" },
+        { japanese: "せんしゅ", chinese: "選手" },
+        { japanese: "せめる", chinese: "責備、進攻" },
+        { japanese: "しょうぶ", chinese: "勝負、比賽" },
+        { japanese: "しょうはい", chinese: "勝敗" },
+        { japanese: "をやぶる がやぶれる", chinese: "打破、輸/被打破、輸" },
+        { japanese: "ひきわけ", chinese: "平局、平手" },
+        { japanese: "どくしょ", chinese: "讀書" },
+        { japanese: "ちょしゃ", chinese: "著者、作者" },
+        { japanese: "しょせき", chinese: "書籍" },
+        { japanese: "もくじ", chinese: "目錄" },
+        { japanese: "さくいん", chinese: "索引" },
+        { japanese: "ひょうろん", chinese: "評論" },
+        { japanese: "しっぴつ", chinese: "寫作、執筆" },
+        { japanese: "こてん", chinese: "古典" },
+        { japanese: "やくす", chinese: "翻譯" },
+        { japanese: "しょうせつ", chinese: "小說" },
+        { japanese: "けっさく", chinese: "傑作" },
+        { japanese: "めいばめん", chinese: "名場面" },
+        { japanese: "ずいひつ", chinese: "隨筆、散文" },
+        { japanese: "みつかる", chinese: "被找到、發現" },
+        { japanese: "あらすじ", chinese: "概要、大綱" },
+        { japanese: "えんげき", chinese: "戲劇" },
+        { japanese: "げきじょう", chinese: "劇場" },
+        { japanese: "しばい", chinese: "戲劇、表演" },
+        { japanese: "えんぎ", chinese: "演技" },
+        { japanese: "しゅやく", chinese: "主角" },
+        { japanese: "わきやく", chinese: "配角" },
+        { japanese: "ぶたい", chinese: "舞台" },
+        { japanese: "まく", chinese: "幕" },
+        { japanese: "セリフ", chinese: "台詞" },
+        { japanese: "えんそう", chinese: "演奏" },
+        { japanese: "さいほう", chinese: "裁縫" },
+        { japanese: "こうげい", chinese: "工藝" },
+        { japanese: "わた（綿）", chinese: "棉花" },
+        { japanese: "つめふ（詰める）", chinese: "塞滿、裝入" },
+        { japanese: "けずる ほる", chinese: "削、刻" },
+        { japanese: "ひょっとすると", chinese: "或許、說不定" },
+        { japanese: "もしかして", chinese: "難道、莫非" },
+        { japanese: "まんがいち", chinese: "萬一、一旦" },
+        { japanese: "わずか", chinese: "少量、一點點" },
+        { japanese: "じつに", chinese: "的確、實在是" },
+        { japanese: "じつは", chinese: "其實、老實說" },
+        { japanese: "まさに", chinese: "正是、即將" }
+    ];
+    // ----------------------------------------------------------------------
+
+    const MAX_QUESTIONS = 20;
+    // 將所有中文意思提取出來，用於製造錯誤選項
+    const ALL_CHINESE_MEANINGS = ALL_WORDS.map(word => word.chinese);
+    let availableWords = [...ALL_WORDS]; // 可用的單詞庫（用於錯誤重洗）
+    let currentQuiz = []; // 當前測驗的 20 題
+    let currentQuestionIndex = 0;
+    let score = 0;
+
+    const quizArea = document.getElementById('quiz-area');
+    const resultScreen = document.getElementById('result-screen');
+    const wordDisplay = document.getElementById('word-display');
+    const optionsContainer = document.getElementById('options-container');
+    const questionCounter = document.getElementById('question-counter');
+    const feedback = document.getElementById('feedback');
+    const finalScore = document.getElementById('final-score');
+    const restartButton = document.getElementById('restart-button');
+
+    // ----------------------------------------------------------------------
+    // 核心工具函數
+    // ----------------------------------------------------------------------
+
+    // 隨機打亂陣列
+    function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
+
+    // 隨機選取不重複的 N 個元素
+    function getRandomElements(array, n, excludeElement = null) {
+        // 確保排除項為字串，以便進行正確比對
+        const excludeString = (typeof excludeElement === 'object' && excludeElement !== null) ? excludeElement.chinese : excludeElement;
+        
+        // 排除掉指定的元素 (通常是正確答案的中文)
+        const tempArray = array.filter(item => item !== excludeString);
+
+        // 如果要取的數量超過了剩下的數量，則將所有剩下的元素都取走
+        if (n > tempArray.length) {
+            n = tempArray.length;
+        }
+
+        shuffleArray(tempArray);
+        return tempArray.slice(0, n);
+    }
+
+    // ----------------------------------------------------------------------
+    // 測驗邏輯
+    // ----------------------------------------------------------------------
+
+    function generateQuiz() {
+        // 1. 確保可用單詞庫足夠
+        if (availableWords.length < MAX_QUESTIONS) {
+            // 如果單詞庫不夠 20 個，則從全部單詞中選取
+            currentQuiz = getRandomElements(ALL_WORDS, MAX_QUESTIONS);
+            // 並將當前測驗的單詞更新到 availableWords，以防下次抽題時不夠
+            availableWords = [...ALL_WORDS]; 
+        } else {
+            // 2. 隨機選取 MAX_QUESTIONS 個單詞作為本輪考題
+            currentQuiz = getRandomElements(availableWords, MAX_QUESTIONS);
+        }
+        
+        // 3. 重置狀態
+        currentQuestionIndex = 0;
+        score = 0;
+        quizArea.style.display = 'block';
+        resultScreen.style.display = 'none';
+        
+        // 4. 開始第一題
+        loadQuestion();
+    }
+
+    function loadQuestion() {
+        // 檢查是否結束
+        if (currentQuestionIndex >= MAX_QUESTIONS) {
+            showResult();
+            return;
+        }
+
+        const currentItem = currentQuiz[currentQuestionIndex];
+        const correctAnswer = currentItem.chinese;
+        
+        // 1. 更新計數器和日文單詞
+        questionCounter.textContent = `問題 ${currentQuestionIndex + 1} / ${MAX_QUESTIONS}`;
+        wordDisplay.textContent = currentItem.japanese;
+        feedback.textContent = '';
+        
+        // 2. 準備選項
+        // 隨機選取 3 個錯誤答案 (從全部中文意思中，排除正確答案)
+        const incorrectOptions = getRandomElements(ALL_CHINESE_MEANINGS, 3, correctAnswer);
+        
+        // 組合所有選項並打亂順序
+        let options = [...incorrectOptions, correctAnswer];
+        shuffleArray(options);
+
+        // 3. 生成選項按鈕
+        optionsContainer.innerHTML = ''; 
+        options.forEach(option => {
+            const button = document.createElement('button');
+            button.classList.add('option-button');
+            button.textContent = option;
+            button.onclick = () => checkAnswer(button, option, correctAnswer);
+            optionsContainer.appendChild(button);
+        });
+        
+        // 重新啟用所有按鈕
+        document.querySelectorAll('.option-button').forEach(btn => btn.disabled = false);
+    }
+
+    function checkAnswer(selectedButton, selectedAnswer, correctAnswer) {
+        // 禁用所有按鈕防止重複點擊
+        document.querySelectorAll('.option-button').forEach(btn => btn.disabled = true);
+
+        if (selectedAnswer === correctAnswer) {
+            // 答對
+            score++;
+            selectedButton.classList.add('correct');
+            feedback.textContent = '✅ 正確！';
+            
+            // 答對的單詞，從 availableWords 移除，減少下次被抽到的機率
+            const correctWord = currentQuiz[currentQuestionIndex];
+            const indexToRemove = availableWords.findIndex(w => w.japanese === correctWord.japanese);
+            if (indexToRemove > -1) {
+                 availableWords.splice(indexToRemove, 1);
+            }
+        } else {
+            // 答錯
+            selectedButton.classList.add('incorrect');
+            feedback.textContent = `❌ 錯誤！正確答案是：${correctAnswer}`;
+            
+            // 顯示正確答案
+            document.querySelectorAll('.option-button').forEach(btn => {
+                if (btn.textContent === correctAnswer) {
+                    btn.classList.add('correct');
+                }
+            });
+            
+            // **錯誤重新洗進題庫的邏輯：**
+            // 答錯的單詞，確保它存在於 availableWords 庫中，增加下次被抽到的機率。
+            const wrongWord = currentQuiz[currentQuestionIndex];
+            const isAlreadyAvailable = availableWords.some(w => w.japanese === wrongWord.japanese);
+            if (!isAlreadyAvailable) {
+                availableWords.push(wrongWord);
+            }
+        }
+
+        // 延遲一段時間後載入下一題
+        setTimeout(() => {
+            // 清除按鈕顏色
+            document.querySelectorAll('.option-button').forEach(btn => btn.classList.remove('correct', 'incorrect'));
+            
+            currentQuestionIndex++;
+            loadQuestion();
+        }, 1500); 
+    }
+
+    function showResult() {
+        quizArea.style.display = 'none';
+        resultScreen.style.display = 'block';
+        finalScore.innerHTML = `您答對了 <span style="font-size: 2em; color: #e74c3c;">${score}</span> 題，總共 ${MAX_QUESTIONS} 題。`;
+        // 這裡可以顯示下一次測驗的單詞庫大小
+        console.log(`單詞庫大小（下次測驗會抽題的範圍）：${availableWords.length} 個。`);
+    }
+
+    // ----------------------------------------------------------------------
+    // 初始化與事件監聽
+    // ----------------------------------------------------------------------
+
+    // 開始測驗
+    restartButton.addEventListener('click', generateQuiz);
+
+    // 網頁載入完成後自動開始第一次測驗
+    window.onload = generateQuiz;
+
+</script>
+</body>
+</html>
