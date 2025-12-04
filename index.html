@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>日檢單詞測驗（大型題庫）</title>
+    <title>日檢單詞混合測驗（20 題）</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -28,12 +28,10 @@
             position: static; 
             text-align: center; 
             margin-bottom: 15px; 
-            
             font-size: 1.1em;
             font-weight: normal; 
             color: #7f8c8d; 
             opacity: 0.7; 
-            
             padding: 0; 
             background: none; 
             border: none;
@@ -65,6 +63,11 @@
             font-weight: bold;
             color: #e74c3c;
             margin: 0;
+        }
+        #question-prompt-text { /* 新增提示文字 */
+            font-size: 1.0em;
+            color: #555;
+            margin-top: 5px;
         }
         #question-counter {
             font-size: 1.1em;
@@ -147,12 +150,13 @@
 <div class="container">
     <div id="remaining-counter"></div> 
 
-    <h1 id="main-title">日檢單詞測驗</h1>
-    <p id="description-text" style="text-align: center; color: #555;"></p>
+    <h1 id="main-title">日檢單詞混合測驗</h1>
+    <p id="description-text" style="text-align: center; color: #555;">本次測驗隨機抽取 20 題，包含「假名選意思」和「漢字選假名」兩種題型。</p>
 
     <div id="quiz-area">
         <div id="question-box">
             <p id="question-counter">問題 1 / 20</p>
+            <p id="question-prompt-text"></p>
             <h2 id="word-display"></h2>
         </div>
         
@@ -172,9 +176,9 @@
 
 <script>
     // ----------------------------------------------------------------------
-    // 1. 單詞庫 (已匯入您提供的所有單詞)
+    // 1. 單詞庫 (已重新結構化為 Kanji/Reading/Meaning)
     // ----------------------------------------------------------------------
-    const ALL_WORDS = [
+    const RAW_WORDS = [
         { japanese: "ひっくりかえす", chinese: "推翻、翻倒、顛倒" },
         { japanese: "けいと", chinese: "毛線" },
         { japanese: "あむ", chinese: "編織" },
@@ -550,10 +554,10 @@
         { japanese: "しっぴつ", chinese: "寫作、執筆" },
         { japanese: "こてん", chinese: "古典" },
         { japanese: "やくす", chinese: "翻譯" },
-        { japanese: "しょうせつ", chinese: "小說" },
+        { japanese: "しょうせつ", chinese: "小説" },
         { japanese: "けっさく", chinese: "傑作" },
         { japanese: "めいばめん", chinese: "名場面" },
-        { japanese: "ずいひつ", chinese: "隨筆、散文" },
+        { japanese: "ずいひつ", chinese: "随筆、散文" },
         { japanese: "みつかる", chinese: "被找到、發現" },
         { japanese: "あらすじ", chinese: "概要、大綱" },
         { japanese: "えんげき", chinese: "戲劇" },
@@ -579,12 +583,291 @@
         { japanese: "じつは", chinese: "其實、老實說" },
         { japanese: "まさに", chinese: "正是、即將" }
     ];
+
+    // ----------------------------------------------------------------------
+    // 2. 資料正規化與 Kanji/Reading 拆分 (為了混合出題)
+    // ----------------------------------------------------------------------
+    const NORMALIZED_WORD_LIST = [];
+    const KANJI_READING_PAIRS = []; // 專門用於漢字選拼音題 (Type 2) 的單字池
+    
+    // 輔助函式：將多重項目拆分，並配對 Kanji (如果適用)
+    function normalizeAndEnrich(item) {
+        // 使用正規表達式嘗試匹配括號內的漢字 (例如: しわす(師走))
+        const regex = /([ぁ-んァ-ン一-龠]+)（([ぁ-んァ-ン一-龠]+)）/;
+        
+        // 嘗試處理多個/符號分隔的項目 (例如: 内科／外科)
+        const parts = item.japanese.split(/[\s\/、・]/).filter(p => p !== '');
+        const chineseParts = item.chinese.split(/[\s\/、・]/).filter(p => p !== '');
+
+        // 處理單一項目
+        if (parts.length === 1 && chineseParts.length === 1) {
+            let kanjiText = item.japanese;
+            let readingText = item.japanese;
+            
+            // 嘗試從原始字串中解析出漢字和讀音
+            let match = item.japanese.match(regex);
+            if (match) {
+                kanjiText = match[2].trim(); // 括號內的通常是漢字
+                readingText = match[1].trim(); // 括號外的通常是讀音
+            } else {
+                // 判斷是否包含漢字
+                const hasKanji = /[\u4e00-\u9faf]/.test(item.japanese);
+                if (hasKanji) {
+                    // 對於單純的漢字詞 (例如: 血液)，Kanji=血液, Reading 需手動轉換
+                    // 為了簡化，這邊只對有 Kanji 的詞，將其作為 Kanji 問題的候選，Kanji/Reading 關係之後在 loadQuestion 時建立
+                    // 這裡我將手動加入一些 Kanij/Reading 對應，否則無法生成正確的 Type 2 題目
+                } else {
+                    // 純假名/片假名詞
+                    // Type 1 Qs: Question = readingText, Answer = chineseText
+                }
+            }
+            
+            // 手動設定一些常見的 Kanji/Reading 對應，覆蓋不準確的解析
+            const manualMapping = {
+                "けいと": { kanji: "毛糸", reading: "けいと" },
+                "どける": { kanji: "退ける", reading: "どける" },
+                "ほこり": { kanji: "埃", reading: "ほこり" },
+                "ほうき": { kanji: "箒", reading: "ほうき" },
+                "ほす": { kanji: "干す", reading: "ほす" },
+                "かわかす": { kanji: "乾かす", reading: "かわかす" },
+                "ゆでる": { kanji: "茹でる", reading: "ゆでる" },
+                "いる": { kanji: "炒る", reading: "いる" },
+                "いためる": { kanji: "炒める", reading: "いためる" },
+                "をにる": { kanji: "煮る", reading: "にる" },
+                "がにえる": { kanji: "煮える", reading: "にえる" },
+                "かじる": { kanji: "齧る", reading: "かじる" },
+                "おごる": { kanji: "奢る", reading: "おごる" },
+                "つまむ": { kanji: "摘む", reading: "つまむ" },
+                "す": { kanji: "酢", reading: "す" },
+                "まずい": { kanji: "不味い", reading: "まずい" },
+                "けつえき": { kanji: "血液", reading: "けつえき" },
+                "おせん": { kanji: "汚染", reading: "おせん" },
+                "みずうみ": { kanji: "湖", reading: "みずうみ" },
+                "せきせつ": { kanji: "積雪", reading: "せきせつ" },
+                "たき": { kanji: "滝", reading: "たき" },
+                "おうぼ": { kanji: "応募", reading: "おうぼ" },
+                "さくや": { kanji: "昨夜", reading: "さくや" },
+                "こげる": { kanji: "焦げる", reading: "こげる" },
+                "そせん": { kanji: "祖先", reading: "そせん" },
+                "しそん": { kanji: "子孫", reading: "しそん" },
+                "まご": { kanji: "孫", reading: "まご" },
+                "ふさい": { kanji: "夫妻", reading: "ふさい" },
+                "しょくば": { kanji: "職場", reading: "しょくば" },
+                "ながねん": { kanji: "長年", reading: "ながねん" },
+                "とくちょう": { kanji: "特徴", reading: "とくちょう" },
+                "うらぎる": { kanji: "裏切る", reading: "うらぎる" },
+                "あきる": { kanji: "飽きる", reading: "あきる" },
+                "あわてる": { kanji: "慌てる", reading: "あわてる" },
+                "あせる": { kanji: "焦る", reading: "あせる" },
+                "きげん": { kanji: "期限", reading: "きげん" },
+                "ぬう": { kanji: "縫う", reading: "ぬう" },
+                "はく": { kanji: "掃く", reading: "はく" },
+                "そうこ": { kanji: "倉庫", reading: "そうこ" },
+                "しまう": { kanji: "仕舞う", reading: "しまう" },
+                "かび": { kanji: "黴", reading: "かび" },
+                "はえる": { kanji: "生える", reading: "はえる" },
+                "くさる": { kanji: "腐る", reading: "くさる" },
+                "なでる": { kanji: "撫でる", reading: "なでる" },
+                "せおう": { kanji: "背負う", reading: "せおう" },
+                "あばれる": { kanji: "暴れる", reading: "あばれる" },
+                "そめる": { kanji: "染める", reading: "そめる" },
+                "もむ": { kanji: "揉む", reading: "もむ" },
+                "ぬける": { kanji: "抜ける", reading: "ぬける" },
+                "はう": { kanji: "這う", reading: "はう" },
+                "もたれる": { kanji: "凭れる", reading: "もたれる" },
+                "てつや": { kanji: "徹夜", reading: "てつや" },
+                "はだ": { kanji: "肌", reading: "はだ" },
+                "あれる": { kanji: "荒れる", reading: "あれる" },
+                "そる": { kanji: "剃る", reading: "そる" },
+                "つとめる": { kanji: "勤める", reading: "つとめる" },
+                "どくしょ": { kanji: "読書", reading: "どくしょ" },
+                "こてん": { kanji: "古典", reading: "こてん" },
+                "やくす": { kanji: "訳す", reading: "やくす" },
+                "ぶたい": { kanji: "舞台", reading: "ぶたい" },
+                "まく": { kanji: "幕", reading: "まく" },
+                "ぬける": { kanji: "抜ける", reading: "ぬける" },
+                "わずか": { kanji: "僅か", reading: "わずか" },
+                "ごかいをとく": { kanji: "誤解を解く", reading: "ごかいをとく" },
+                "なかなおりする": { kanji: "仲直りする", reading: "なかなおりする" },
+                "いっか": { kanji: "一家", reading: "いっか" },
+                "おないとし": { kanji: "同い年", reading: "おないとし" },
+                "きつかい": { kanji: "気遣い", reading: "きつかい" },
+                "あくしゅ": { kanji: "握手", reading: "あくしゅ" },
+                "おじぎをする": { kanji: "お辞儀をする", reading: "おじぎをする" },
+                "あこがれる": { kanji: "憧れる", reading: "あこがれる" },
+                "あやまる": { kanji: "謝る", reading: "あやまる" },
+                "なぐさめる": { kanji: "慰める", reading: "なぐさめる" },
+                "ぶきような": { kanji: "不器用な", reading: "ぶきような" },
+                "ぜいたく": { kanji: "贅沢", reading: "ぜいたく" },
+                "そまつな": { kanji: "粗末な", reading: "そまつな" },
+                "みかけ": { kanji: "見かけ", reading: "みかけ" },
+                "おぼん": { kanji: "お盆", reading: "おぼん" },
+                "ぜんいん": { kanji: "全員", reading: "ぜんいん" },
+                "ゆのみ": { kanji: "湯飲み", reading: "ゆのみ" },
+                "しょうか": { kanji: "消化", reading: "しょうか" },
+                "ずつう": { kanji: "頭痛", reading: "ずつう" },
+                "はきけ": { kanji: "吐き気", reading: "はきけ" },
+                "はく": { kanji: "吐く", reading: "はく" },
+                "おんぶする": { kanji: "おんぶする", reading: "おんぶする" },
+                "だく": { kanji: "抱く", reading: "だく" },
+            };
+            
+            // 檢查是否在手動對應中
+            const manual = manualMapping[item.japanese.replace(/（[^）]+）/g, '').trim()];
+            if (manual) {
+                kanjiText = manual.kanji;
+                readingText = manual.reading;
+            } else if (!match) {
+                // 處理單獨漢字詞 (例如: 血液、師走)
+                const inferredKanji = item.japanese.replace(/（[^）]+）/g, '').trim();
+                const inferredReading = item.japanese.match(/（([^）]+)）/)?.[1] || item.japanese;
+                
+                if (inferredKanji === "けつえき") { kanjiText = "血液"; readingText = "けつえき"; }
+                else if (inferredKanji === "おせん") { kanjiText = "汚染"; readingText = "おせん"; }
+                else if (inferredKanji === "ようちえん") { kanjiText = "幼稚園"; readingText = "ようちえん"; }
+                else if (inferredKanji === "てつがく") { kanjiText = "哲学"; readingText = "てつがく"; }
+                else if (inferredKanji === "きょうじゅ") { kanjiText = "教授"; readingText = "きょうじゅ"; }
+                else if (inferredKanji === "ふくそう") { kanjiText = "服装"; readingText = "ふくそう"; }
+                else if (inferredKanji === "しょくよく") { kanjiText = "食欲"; readingText = "しょくよく"; }
+                else if (inferredKanji === "かんげいかい") { kanjiText = "歓迎会"; readingText = "かんげいかい"; }
+                else if (inferredKanji === "じゅみょう") { kanjiText = "寿命"; readingText = "じゅみょう"; }
+                else if (inferredKanji === "せんしゅ") { kanjiText = "選手"; readingText = "せんしゅ"; }
+                else if (inferredKanji === "しっぴつ") { kanjiText = "執筆"; readingText = "しっぴつ"; }
+                else if (inferredKanji === "えんぎ") { kanjiText = "演技"; readingText = "えんぎ"; }
+                else if (inferredKanji === "さいほう") { kanjiText = "裁縫"; reading: "さいほう"; }
+                else if (inferredKanji === "こうげい") { kanjiText = "工芸"; reading: "こうげい"; }
+                else if (inferredKanji === "せんこうする") { kanjiText = "専攻する"; reading: "せんこうする"; }
+                else if (inferredKanji === "ひょうろん") { kanjiText = "評論"; reading: "ひょうろん"; }
+                else if (inferredKanji === "えいよう") { kanjiText = "栄養"; reading: "えいよう"; }
+                else if (inferredKanji === "がいか") { kanjiText = "外科"; reading: "げか"; }
+                else if (inferredKanji === "ないか") { kanji: "内科", reading: "ないか"; }
+                else if (inferredKanji === "しんさつ") { kanji: "診察", reading: "しんさつ"; }
+                else if (inferredKanji === "かんじゃ") { kanji: "患者", reading: "かんじゃ"; }
+                else if (inferredKanji === "やっきょく") { kanji: "薬局", reading: "やっきょく"; }
+                else if (inferredKanji === "そんがいをだす") { kanji: "損害を出す", reading: "そんがいをだす"; }
+                else if (inferredKanji === "組織する") { kanji: "組織する", reading: "そしきする"; }
+            }
+
+            
+            NORMALIZED_WORD_LIST.push({
+                kanji: kanjiText,
+                reading: readingText,
+                chinese: item.chinese,
+                isKanjiQuestion: kanjiText !== readingText.replace(/（[^）]+）/g, '').trim() // 簡單檢查是否有 Kanji
+            });
+        } 
+        
+        // 處理多個項目並拆分 (例如: 內科／外科)
+        else if (parts.length > 1 && parts.length === chineseParts.length) {
+            for (let i = 0; i < parts.length; i++) {
+                let kanjiText = parts[i];
+                let readingText = parts[i];
+                let chineseText = chineseParts[i];
+                
+                // 再次進行手動對應和清理 (以內科/外科為例)
+                if (kanjiText.includes('／')) {
+                    const [k1, k2] = kanjiText.split('／').map(s => s.trim());
+                    const [r1, r2] = chineseText.split('／').map(s => s.trim()); 
+                    
+                    if (k1 === "ないか" && k2 === "げか") {
+                        NORMALIZED_WORD_LIST.push({ kanji: "内科", reading: "ないか", chinese: r1, isKanjiQuestion: true });
+                        NORMALIZED_WORD_LIST.push({ kanji: "外科", reading: "げか", chinese: r2, isKanjiQuestion: true });
+                    }
+                    if (k1 === "すな" && k2 === "どろ") {
+                        NORMALIZED_WORD_LIST.push({ kanji: "砂", reading: "すな", chinese: chineseParts[0].split(' / ')[0].trim(), isKanjiQuestion: true });
+                        NORMALIZED_WORD_LIST.push({ kanji: "泥", reading: "どろ", chinese: chineseParts[0].split(' / ')[1].trim(), isKanjiQuestion: true });
+                    }
+                    if (k1 === "なだらかな" && k2 === "けわしい") {
+                        NORMALIZED_WORD_LIST.push({ kanji: "なだらかな", reading: "なだらかな", chinese: chineseParts[0].split(' / ')[0].trim(), isKanjiQuestion: false });
+                        NORMALIZED_WORD_LIST.push({ kanji: "険しい", reading: "けわしい", chinese: chineseParts[0].split(' / ')[1].trim(), isKanjiQuestion: true });
+                    }
+                    if (k1 === "つよきな" && k2 === "よわきな") {
+                        NORMALIZED_WORD_LIST.push({ kanji: "強気な", reading: "つよきな", chinese: chineseParts[0].split(' / ')[0].trim(), isKanjiQuestion: true });
+                        NORMALIZED_WORD_LIST.push({ kanji: "弱気な", reading: "よわきな", chinese: chineseParts[0].split(' / ')[1].trim(), isKanjiQuestion: true });
+                    }
+                    if (k1 === "けずる" && k2 === "ほる") {
+                        NORMALIZED_WORD_LIST.push({ kanji: "削る", reading: "けずる", chinese: chineseParts[0].split('、')[0].trim(), isKanjiQuestion: true });
+                        NORMALIZED_WORD_LIST.push({ kanji: "彫る", reading: "ほる", chinese: chineseParts[0].split('、')[1].trim(), isKanjiQuestion: true });
+                    }
+                    // 為了避免過度複雜，我將在 JS 中手動處理這些多重對應，以確保資料正確性
+                } else if (kanjiText.includes('（')) {
+                     // 處理括號 (例如: 当分（とうぶん）)
+                    kanjiText = parts[i].split('（')[0].trim();
+                    readingText = parts[i].match(/（([^）]+)）/)?.[1] || parts[i];
+
+                    NORMALIZED_WORD_LIST.push({
+                        kanji: kanjiText,
+                        reading: readingText,
+                        chinese: chineseText,
+                        isKanjiQuestion: kanjiText !== readingText
+                    });
+                } else {
+                    // 將純假名詞視為非漢字題的候選
+                    NORMALIZED_WORD_LIST.push({
+                        kanji: kanjiText,
+                        reading: readingText,
+                        chinese: chineseText,
+                        isKanjiQuestion: /[\u4e00-\u9faf]/.test(kanjiText) 
+                    });
+                }
+            }
+        } 
+        // 處理其餘單一或無法準確拆分的項目，使用最簡單的對應
+        else {
+            let kanji = item.japanese.split(/[\s\/、・]/)[0].replace(/（[^）]+）/g, '').trim();
+            let reading = item.japanese.match(/（([^）]+)）/)?.[1] || kanji;
+            
+            // 由於前幾次已經處理了大量詞彙，剩下的使用最原始的映射，並嘗試找尋漢字
+            let finalKanji = kanji;
+            let finalReading = reading;
+            
+            // 最後一次嘗試從已知對應中找
+            const manual = manualMapping[kanji];
+            if (manual) {
+                finalKanji = manual.kanji;
+                finalReading = manual.reading;
+            } else if (!/[\u4e00-\u9faf]/.test(kanji)) {
+                 // 假名詞彙，例如: あかんぼう -> 赤ん坊
+                if (kanji === "あかんぼう") { finalKanji = "赤ん坊"; finalReading = "あかんぼう"; }
+                else if (kanji === "しらが") { finalKanji = "白髪"; finalReading = "しらが"; }
+                else if (kanji === "あらすじ") { finalKanji = "あらすじ"; finalReading = "あらすじ"; }
+            }
+            
+            NORMALIZED_WORD_LIST.push({
+                kanji: finalKanji,
+                reading: finalReading,
+                chinese: item.chinese,
+                isKanjiQuestion: finalKanji !== finalReading
+            });
+        }
+    }
+    
+    // 執行正規化
+    RAW_WORDS.forEach(normalizeAndEnrich);
+    
+    // 從正規化清單中篩選出適合 Kanji 題型的單字池
+    const KANJI_WORDS_POOL = NORMALIZED_WORD_LIST.filter(item => {
+        // 確保 Kanji 和 Reading 不同，且 Kanji 包含實際漢字（非純假名）
+        const hasKanjiChar = /[\u4e00-\u9faf]/.test(item.kanji);
+        return hasKanjiChar && item.kanji !== item.reading;
+    }).map(item => ({
+        ...item,
+        type: 'kanji_to_reading'
+    }));
+
+    // 篩選出適合 Reading 題型的單字池 (所有詞彙皆可)
+    const READING_WORDS_POOL = NORMALIZED_WORD_LIST.map(item => ({
+        ...item,
+        type: 'reading_to_chinese'
+    }));
+
+
     // ----------------------------------------------------------------------
 
-    // *** 關鍵變動：總題數現在等於單字庫的長度 ***
-    const MAX_QUESTIONS = ALL_WORDS.length;
-    const ALL_CHINESE_MEANINGS = ALL_WORDS.map(word => word.chinese);
-    let availableWords = [...ALL_WORDS]; 
+    const MAX_QUESTIONS = 20; 
+    const ALL_CHINESE_MEANINGS = NORMALIZED_WORD_LIST.map(word => word.chinese);
+    const ALL_READINGS = NORMALIZED_WORD_LIST.map(word => word.reading);
+    let availableWords = [...NORMALIZED_WORD_LIST]; // 用於記錄答錯後需練習的詞彙
     let currentQuiz = []; 
     let currentQuestionIndex = 0;
     let score = 0;
@@ -598,10 +881,9 @@
     const finalScore = document.getElementById('final-score');
     const restartButton = document.getElementById('restart-button');
     const remainingCounter = document.getElementById('remaining-counter'); 
+    const questionPromptText = document.getElementById('question-prompt-text'); 
     
-    // 新增：抓取標題和說明文字元素
-    const mainTitle = document.getElementById('main-title');
-    const descriptionText = document.getElementById('description-text');
+    const totalQuizLengthDisplay = document.getElementById('total-quiz-length');
 
 
     // ----------------------------------------------------------------------
@@ -617,9 +899,9 @@
     }
 
     function getRandomElements(array, n, excludeElement = null) {
-        const excludeString = (typeof excludeElement === 'object' && excludeElement !== null) ? excludeElement.chinese : excludeElement;
+        const excludeSet = new Set(Array.isArray(excludeElement) ? excludeElement : [excludeElement].filter(e => e !== null));
         
-        const tempArray = array.filter(item => item !== excludeString);
+        const tempArray = array.filter(item => !excludeSet.has(item));
 
         if (n > tempArray.length) {
             n = tempArray.length;
@@ -628,77 +910,147 @@
         shuffleArray(tempArray);
         return tempArray.slice(0, n);
     }
+    
+    // 新增：生成漢字題的干擾選項
+    function generateReadingDistractors(correctReading) {
+        let distractors = [];
+        let base = correctReading.replace(/[っ]/g, '').replace(/[ー]/g, '');
+
+        // 1. 促音或長音干擾
+        if (correctReading.includes('っ')) {
+            distractors.push(correctReading.replace('っ', ''));
+        } else if (correctReading.length > 2 && correctReading.includes(correctReading[correctReading.length - 2])) {
+            distractors.push(correctReading.slice(0, -1) + 'ー');
+        } else {
+            // 隨機添加長音
+            if (base.length > 2) {
+                 const longVowels = ['あ', 'い', 'う', 'え', 'お'];
+                 const lastVowel = base.slice(-1);
+                 if (longVowels.includes(lastVowel)) {
+                     distractors.push(base + 'ー');
+                 }
+            }
+        }
+        
+        // 2. 相似假名干擾
+        const allReadings = ALL_READINGS.filter(r => r !== correctReading);
+        
+        // 確保選項不重複
+        const uniqueDistractors = new Set(distractors);
+
+        // 3. 隨機選取其他詞彙的讀音作為干擾
+        const randomReadings = getRandomElements(allReadings, 4 - uniqueDistractors.size, Array.from(uniqueDistractors));
+        randomReadings.forEach(r => uniqueDistractors.add(r));
+
+        return Array.from(uniqueDistractors).slice(0, 3);
+    }
+
 
     // ----------------------------------------------------------------------
     // 測驗邏輯
     // ----------------------------------------------------------------------
 
     function generateQuiz() {
-        // 更新標題和說明文字
-        mainTitle.textContent = `日檢單詞測驗（總共 ${MAX_QUESTIONS} 題）`;
-        descriptionText.textContent = `本次測驗將涵蓋您題庫中的所有 ${MAX_QUESTIONS} 個單字。`;
-
-        // 由於 MAX_QUESTIONS 現在是所有單字的總和，我們直接將所有單字打亂作為測驗題目
-        currentQuiz = shuffleArray([...ALL_WORDS]); 
-        availableWords = [...ALL_WORDS]; 
+        const KANJI_COUNT = KANJI_WORDS_POOL.length;
+        const KANJI_Q_NUM = Math.min(10, KANJI_COUNT);
+        const READING_Q_NUM = MAX_QUESTIONS - KANJI_Q_NUM;
+        const totalQuizLength = KANJI_Q_NUM + READING_Q_NUM;
+        
+        // 1. 抽取漢字題 (Type 2: Kanji -> Reading)
+        const kanjiQuestions = getRandomElements(KANJI_WORDS_POOL, KANJI_Q_NUM);
+        
+        // 2. 確保 Reading 題的詞彙不重複
+        const kanjiWordsUsed = kanjiQuestions.map(q => q.kanji);
+        const availableReadingPool = READING_WORDS_POOL.filter(word => !kanjiWordsUsed.includes(word.kanji));
+        
+        // 3. 抽取假名題 (Type 1: Reading -> Chinese Meaning)
+        const readingQuestions = getRandomElements(availableReadingPool, READING_Q_NUM);
+        
+        // 4. 合併並打亂
+        currentQuiz = shuffleArray([...kanjiQuestions, ...readingQuestions]); 
+        availableWords = [...NORMALIZED_WORD_LIST]; // 重置答錯單字庫
         
         currentQuestionIndex = 0;
         score = 0;
         quizArea.style.display = 'block';
         resultScreen.style.display = 'none';
+
+        // 更新標題和說明文字
+        document.getElementById('main-title').textContent = `日檢單詞混合測驗（共 ${totalQuizLength} 題）`;
+        document.getElementById('description-text').textContent = `本次測驗包含 ${KANJI_Q_NUM} 題漢字選拼音，以及 ${READING_Q_NUM} 題假名選意思。`;
         
         loadQuestion();
     }
 
     function loadQuestion() {
-        if (currentQuestionIndex >= MAX_QUESTIONS) {
+        const totalQuizLength = currentQuiz.length; 
+
+        if (currentQuestionIndex >= totalQuizLength) {
             showResult();
             return;
         }
 
         const currentItem = currentQuiz[currentQuestionIndex];
-        const correctAnswer = currentItem.chinese;
+        const isKanjiQ = currentItem.type === 'kanji_to_reading';
 
         const currentNumber = currentQuestionIndex + 1;
-        const completedNumber = currentQuestionIndex; // 已作答題數 (當前載入的題號 - 1)
-        const totalNumber = MAX_QUESTIONS; 
-
-        // 1. 更新進度顯示器 (已作答 / 總題數)
-        remainingCounter.textContent = `已作答 ${completedNumber} / 共 ${totalNumber} 題`;
+        
+        // 1. 更新頂部進度顯示器 (已作答 / 總題數)
+        remainingCounter.textContent = `已作答 ${currentQuestionIndex} / 共 ${totalQuizLength} 題`;
         
         // 2. 更新問題框內的題號 (第 N 題 / 共 M 題)
-        questionCounter.textContent = `第 ${currentNumber} 題 / 共 ${MAX_QUESTIONS} 題`;
-
-        wordDisplay.textContent = currentItem.japanese;
+        questionCounter.textContent = `第 ${currentNumber} 題 / 共 ${totalQuizLength} 題`;
+        
         feedback.textContent = '';
         
-        const incorrectOptions = getRandomElements(ALL_CHINESE_MEANINGS, 3, correctAnswer);
-        
-        let options = [...incorrectOptions, correctAnswer];
+        let options = [];
+        let correctAnswer = '';
+        let questionDisplay = '';
+
+        if (isKanjiQ) {
+            // Type 2: 漢字 -> 選拼音
+            questionPromptText.textContent = '請選出此漢字詞的正確**拼音（假名）**：';
+            questionDisplay = currentItem.kanji;
+            correctAnswer = currentItem.reading;
+            
+            const incorrectOptions = generateReadingDistractors(correctAnswer);
+            options = [...incorrectOptions, correctAnswer];
+        } else {
+            // Type 1: 拼音/假名 -> 選中文意思
+            questionPromptText.textContent = '請選出此日文詞彙的正確**中文意思**：';
+            questionDisplay = currentItem.reading;
+            correctAnswer = currentItem.chinese;
+            
+            const incorrectOptions = getRandomElements(ALL_CHINESE_MEANINGS, 3, correctAnswer);
+            options = [...incorrectOptions, correctAnswer];
+        }
+
         shuffleArray(options);
 
+        wordDisplay.textContent = questionDisplay;
         optionsContainer.innerHTML = ''; 
         options.forEach(option => {
             const button = document.createElement('button');
             button.classList.add('option-button');
             button.textContent = option;
-            button.onclick = () => checkAnswer(button, option, correctAnswer);
+            button.onclick = () => checkAnswer(button, option, correctAnswer, currentItem.kanji);
             optionsContainer.appendChild(button);
         });
         
         document.querySelectorAll('.option-button').forEach(btn => btn.disabled = false);
     }
 
-    function checkAnswer(selectedButton, selectedAnswer, correctAnswer) {
+    function checkAnswer(selectedButton, selectedAnswer, correctAnswer, wordKey) {
         document.querySelectorAll('.option-button').forEach(btn => btn.disabled = true);
+        const totalQuizLength = currentQuiz.length;
 
         if (selectedAnswer === correctAnswer) {
             score++;
             selectedButton.classList.add('correct');
             feedback.textContent = '✅ 正確！';
             
-            const correctWord = currentQuiz[currentQuestionIndex];
-            const indexToRemove = availableWords.findIndex(w => w.japanese === correctWord.japanese);
+            // 答對的詞從待練習清單中移除（如果存在）
+            const indexToRemove = availableWords.findIndex(w => w.kanji === wordKey);
             if (indexToRemove > -1) {
                  availableWords.splice(indexToRemove, 1);
             }
@@ -712,15 +1064,16 @@
                 }
             });
             
-            const wrongWord = currentQuiz[currentQuestionIndex];
-            const isAlreadyAvailable = availableWords.some(w => w.japanese === wrongWord.japanese);
-            if (!isAlreadyAvailable) {
+            // 答錯的詞加回待練習清單
+            const wrongWord = NORMALIZED_WORD_LIST.find(w => w.kanji === wordKey);
+            const isAlreadyAvailable = availableWords.some(w => w.kanji === wordKey);
+            if (wrongWord && !isAlreadyAvailable) {
                 availableWords.push(wrongWord);
             }
         }
 
-        // 在顯示正確答案後立即更新已作答題數
-        remainingCounter.textContent = `已作答 ${currentQuestionIndex + 1} / 共 ${MAX_QUESTIONS} 題`;
+        // 更新已作答題數
+        remainingCounter.textContent = `已作答 ${currentQuestionIndex + 1} / 共 ${totalQuizLength} 題`;
         
         setTimeout(() => {
             document.querySelectorAll('.option-button').forEach(btn => btn.classList.remove('correct', 'incorrect'));
@@ -731,13 +1084,13 @@
     }
 
     function showResult() {
+        const totalQuizLength = currentQuiz.length;
         quizArea.style.display = 'none';
         resultScreen.style.display = 'block';
         
-        // 確保結果畫面上顯示已作答完所有題目
-        remainingCounter.textContent = `已作答 ${MAX_QUESTIONS} / 共 ${MAX_QUESTIONS} 題`; 
+        remainingCounter.textContent = `已作答 ${totalQuizLength} / 共 ${totalQuizLength} 題`; 
         
-        finalScore.innerHTML = `您答對了 <span style="font-size: 2em; color: #e74c3c;">${score}</span> 題，總共 ${MAX_QUESTIONS} 題。`;
+        finalScore.innerHTML = `您答對了 <span style="font-size: 2em; color: #e74c3c;">${score}</span> 題，總共 ${totalQuizLength} 題。`;
     }
 
     restartButton.addEventListener('click', generateQuiz);
@@ -747,4 +1100,3 @@
 </script>
 </body>
 </html>
-
